@@ -259,6 +259,7 @@
       const acoes = el('div', { class: 'acoes' });
       if (st.souDono) {
         const f = (rotulo, cls, fn) => el('button', { type: 'button', class: 'btn ' + cls, onclick: fn }, rotulo);
+        acoes.append(f('✏️ Editar', 'esq', () => { fechar(); editar(p); }));
         if (p.estado === 'novo') acoes.append(f('Recusar', 'perigo esq', () => { fechar(); recusar(p); }), f('Aceitar e mover para A fazer', 'prim', () => { fechar(); aceitar(p); }));
         else if (p.estado === 'recusado') acoes.append(f('Desfazer a recusa', 'esq', () => { fechar(); mudar(p.id, { status: 'novo', motivo: null }); }), f('Aceitar e mover para A fazer', 'prim', () => { fechar(); aceitar(p); }));
         else if (p.estado === 'a_fazer') acoes.append(f('Voltar para Novas', 'esq', () => { fechar(); mudar(p.id, { status: 'novo', prioridade: null }); }), f('Mudar prioridade e data', '', () => { fechar(); aceitar(p, true); }), f('Começar (Em progresso)', 'prim', () => { fechar(); mudar(p.id, { status: 'em_progresso', iniciado_em: new Date().toISOString() }); }));
@@ -268,6 +269,32 @@
       acoes.append(el('button', { type: 'button', class: 'btn', onclick: fechar }, 'Fechar'));
       m.append(acoes);
       return m;
+    });
+  }
+
+  // o dono corrige o que foi pedido: nome, tipo, descrição e quem pediu
+  function editar(p) {
+    abrirModal((fechar) => {
+      const titulo = el('input', { id: 'e-titulo', maxlength: '160', value: p.titulo || '' });
+      const tipo = el('select', { id: 'e-tipo' }, TIPOS.map((t) => el('option', { value: t, text: t, selected: t === p.tipo })));
+      const quem = el('input', { id: 'e-quem', maxlength: '80', value: p.solicitante || '' });
+      const desc = el('textarea', { id: 'e-desc', maxlength: '6000' }); desc.value = p.descricao || '';
+      const erro = el('div', { class: 'erro', hidden: true });
+      return el('form', { class: 'modal', onsubmit: async (e) => {
+        e.preventDefault();
+        if (!titulo.value.trim() || !quem.value.trim()) { erro.hidden = false; erro.textContent = 'O nome do pedido e quem pediu não podem ficar em branco.'; return; }
+        fechar();
+        await mudar(p.id, { titulo: titulo.value.trim(), tipo: tipo.value, descricao: desc.value.trim(), solicitante: quem.value.trim() });
+        aviso('Pedido salvo.');
+      } },
+        el('h2', { text: 'Editar o pedido' }),
+        el('div', { class: 'campo' }, el('label', { for: 'e-titulo', text: 'Nome do pedido' }), titulo),
+        el('div', { class: 'duas' },
+          el('div', { class: 'campo' }, el('label', { for: 'e-tipo', text: 'Tipo' }), tipo),
+          el('div', { class: 'campo' }, el('label', { for: 'e-quem', text: 'Quem pediu' }), quem)),
+        el('div', { class: 'campo' }, el('label', { for: 'e-desc', text: 'Descrição' }), desc),
+        erro,
+        el('div', { class: 'acoes' }, el('button', { type: 'button', class: 'btn', onclick: fechar }, 'Cancelar'), el('button', { type: 'submit', class: 'btn prim', text: 'Salvar' })));
     });
   }
 
@@ -335,7 +362,25 @@
     await carregar();
   }
 
-  // ── a entrada do dono (link no e-mail) ──
+  // ── a entrada do dono (link no e-mail), pelo botão do topo ──
+  function entrarComoDono() {
+    abrirModal((fechar) => {
+      const email = el('input', { type: 'email', id: 'f-email', placeholder: 'seu e-mail', value: lerLocal('cp:email-dono') || '' });
+      const msg = el('div', { class: 'quem' });
+      return el('form', { class: 'modal', onsubmit: async (e) => {
+        e.preventDefault();
+        if (!email.value.trim()) return;
+        guardar('cp:email-dono', email.value.trim());
+        const { error } = await sb.auth.signInWithOtp({ email: email.value.trim(), options: { emailRedirectTo: location.origin + location.pathname, shouldCreateUser: true } });
+        msg.textContent = error ? 'Não foi possível mandar o link: ' + error.message : 'Pronto: enviamos um link de entrada para ' + email.value.trim() + '. Abra o e-mail NESTE computador e clique no link (olhe também o spam).';
+      } },
+        el('h2', { text: 'Entrar como dono' }),
+        el('div', { class: 'quem', text: 'Só o dono do quadro aceita, prioriza, edita e recusa pedidos. Digite o seu e-mail para receber o link de entrada (não tem senha).' }),
+        el('div', { class: 'campo' }, el('label', { for: 'f-email', text: 'E-mail' }), email),
+        msg,
+        el('div', { class: 'acoes' }, el('button', { type: 'button', class: 'btn', onclick: fechar }, 'Fechar'), el('button', { type: 'submit', class: 'btn prim', text: 'Receber link de entrada' })));
+    });
+  }
   async function verDono() {
     const { data } = await sb.auth.getSession();
     st.email = data.session?.user?.email || null;
@@ -344,20 +389,17 @@
       const r = await sb.rpc('eh_dono');
       st.souDono = r.data === true;
     }
-    const rod = $('#rodape');
+    const btn = $('#btn-dono');
     if (st.souDono) {
       $('#quem').replaceChildren('Você: ', el('b', { text: st.email }), el('span', { class: 'selo-dono', text: 'dono do quadro' }));
-      rod.replaceChildren(el('button', { type: 'button', class: 'btn peq', onclick: async () => { await sb.auth.signOut(); await verDono(); render(); } }, 'Sair'));
+      btn.textContent = 'Sair';
+      btn.onclick = async () => { await sb.auth.signOut(); await verDono(); render(); };
     } else {
-      $('#quem').textContent = '';
-      const email = el('input', { type: 'email', placeholder: 'e-mail do dono', 'aria-label': 'E-mail do dono' });
-      rod.replaceChildren(el('form', { class: 'entrar', onsubmit: async (e) => {
-        e.preventDefault();
-        if (!email.value.trim()) return;
-        const { error } = await sb.auth.signInWithOtp({ email: email.value.trim(), options: { emailRedirectTo: location.origin + location.pathname, shouldCreateUser: true } });
-        aviso(error ? 'Não foi possível mandar o link: ' + error.message : 'Enviamos um link de entrada para ' + email.value.trim() + '. Abra o e-mail neste aparelho.');
-      } }, 'Área do dono:', email, el('button', { type: 'submit', class: 'btn peq' }, 'Receber link de entrada')));
+      $('#quem').textContent = st.email ? 'Você entrou como ' + st.email + ', que não é o dono do quadro.' : '';
+      btn.textContent = st.email ? 'Sair' : '🔑 Entrar como dono';
+      btn.onclick = st.email ? async () => { await sb.auth.signOut(); await verDono(); render(); } : entrarComoDono;
     }
+    $('#rodape').replaceChildren();
   }
   sb.auth.onAuthStateChange(() => { verDono().then(render); });
 
