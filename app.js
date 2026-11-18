@@ -371,7 +371,7 @@
         e.preventDefault();
         if (!email.value.trim()) return;
         guardar('cp:email-dono', email.value.trim());
-        const { error } = await sb.auth.signInWithOtp({ email: email.value.trim(), options: { emailRedirectTo: location.origin + location.pathname, shouldCreateUser: true } });
+        const { error } = await sb.auth.signInWithOtp({ email: email.value.trim(), options: { emailRedirectTo: location.origin + location.pathname + '#dono', shouldCreateUser: true } });
         msg.textContent = error ? 'Não foi possível mandar o link: ' + error.message : 'Pronto: enviamos um link de entrada para ' + email.value.trim() + '. Abra o e-mail NESTE computador e clique no link (olhe também o spam).';
       } },
         el('h2', { text: 'Entrar como dono' }),
@@ -394,10 +394,13 @@
       $('#quem').replaceChildren('Você: ', el('b', { text: st.email }), el('span', { class: 'selo-dono', text: 'dono do quadro' }));
       btn.textContent = 'Sair';
       btn.onclick = async () => { await sb.auth.signOut(); await verDono(); render(); };
+      btn.hidden = false;
     } else {
       $('#quem').textContent = st.email ? 'Você entrou como ' + st.email + ', que não é o dono do quadro.' : '';
       btn.textContent = st.email ? 'Sair' : '🔑 Entrar como dono';
       btn.onclick = st.email ? async () => { await sb.auth.signOut(); await verDono(); render(); } : entrarComoDono;
+      // o botão de entrar só aparece no link do dono (com #dono no fim); os colegas usam o link sem isso e não o veem
+      btn.hidden = !st.email && location.hash !== '#dono';
     }
     $('#rodape').replaceChildren();
   }
