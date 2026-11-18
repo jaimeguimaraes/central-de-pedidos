@@ -363,22 +363,32 @@
   }
 
   // ── a entrada do dono (link no e-mail), pelo botão do topo ──
+  // a entrada do dono: e-mail e senha (o link por e-mail chegava "usado": o antivírus do e-mail corporativo abre o
+  // link antes da pessoa — 18/11/2026)
   function entrarComoDono() {
     abrirModal((fechar) => {
-      const email = el('input', { type: 'email', id: 'f-email', placeholder: 'seu e-mail', value: lerLocal('cp:email-dono') || '' });
-      const msg = el('div', { class: 'quem' });
+      const email = el('input', { type: 'email', id: 'f-email', autocomplete: 'username', placeholder: 'seu e-mail', value: lerLocal('cp:email-dono') || '' });
+      const senha = el('input', { type: 'password', id: 'f-senha', autocomplete: 'current-password', placeholder: 'sua senha' });
+      const msg = el('div', { class: 'erro', hidden: true });
+      const botao = el('button', { type: 'submit', class: 'btn prim', text: 'Entrar' });
       return el('form', { class: 'modal', onsubmit: async (e) => {
         e.preventDefault();
-        if (!email.value.trim()) return;
+        if (!email.value.trim() || !senha.value) return;
+        botao.disabled = true; botao.textContent = 'Entrando…';
+        const { error } = await sb.auth.signInWithPassword({ email: email.value.trim(), password: senha.value });
+        botao.disabled = false; botao.textContent = 'Entrar';
+        if (error) { msg.hidden = false; msg.textContent = 'E-mail ou senha não conferem.'; return; }
         guardar('cp:email-dono', email.value.trim());
-        const { error } = await sb.auth.signInWithOtp({ email: email.value.trim(), options: { emailRedirectTo: location.origin + location.pathname + '#dono', shouldCreateUser: true } });
-        msg.textContent = error ? 'Não foi possível mandar o link: ' + error.message : 'Pronto: enviamos um link de entrada para ' + email.value.trim() + '. Abra o e-mail NESTE computador e clique no link (olhe também o spam).';
+        fechar();
+        await verDono(); render();
+        aviso(st.souDono ? 'Você entrou como dono do quadro.' : 'Você entrou, mas este e-mail não é o dono do quadro.');
       } },
         el('h2', { text: 'Entrar como dono' }),
-        el('div', { class: 'quem', text: 'Só o dono do quadro aceita, prioriza, edita e recusa pedidos. Digite o seu e-mail para receber o link de entrada (não tem senha).' }),
+        el('div', { class: 'quem', text: 'Só o dono do quadro aceita, prioriza, edita e recusa pedidos.' }),
         el('div', { class: 'campo' }, el('label', { for: 'f-email', text: 'E-mail' }), email),
+        el('div', { class: 'campo' }, el('label', { for: 'f-senha', text: 'Senha' }), senha),
         msg,
-        el('div', { class: 'acoes' }, el('button', { type: 'button', class: 'btn', onclick: fechar }, 'Fechar'), el('button', { type: 'submit', class: 'btn prim', text: 'Receber link de entrada' })));
+        el('div', { class: 'acoes' }, el('button', { type: 'button', class: 'btn', onclick: fechar }, 'Fechar'), botao));
     });
   }
   async function verDono() {
